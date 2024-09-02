@@ -4,7 +4,7 @@
 (def scour 'com.dheiniger/scour)
 (def version (format "0.1.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
-(def jar-file (format "target/%s-%s.jar" (name scour) version))
+(def jar-file (format "target/%s-%s.jar" (identity scour) version))
 
 ;; delay to defer side effects (artifact downloads)
 (def basis (delay (b/create-basis {:project "deps.edn"})))

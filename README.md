@@ -1,4 +1,6 @@
-Scour
+# Scour
+
+[![Clojars Project](https://img.shields.io/clojars/v/com.dheiniger/scour.svg)](https://clojars.org/com.dheiniger/scour)
 
 A very small Clojure library intended for crawling and downloading webpages.
 

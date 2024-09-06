@@ -3,7 +3,8 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
-  (:import (org.jsoup Jsoup)))
+  (:import [org.jsoup Jsoup]
+           [org.jsoup.nodes Document Element]))
 
 (defn- download-page
   ([url] (download-page url 2000))
@@ -28,18 +29,18 @@
         pattern (re-pattern domain)]
     (some? (re-find pattern url))))
 
-(defn- get-hrefs [^org.jsoup.nodes.Document doc]
+(defn- get-hrefs [^Document doc]
   (when doc
-    (let [^org.jsoup.nodes.Element hrefs (.select doc "[href]")]
+    (let [^Element hrefs (.select doc "[href]")]
       (log/info "Found hrefs from page: " hrefs)
-      (map (fn [^org.jsoup.nodes.Element href]
+      (map (fn [^Element href]
              (.attr href "abs:href")) hrefs))))
 
 (defn- get-domain [url]
   (:host (bean (as-url url))))
 
 (defn- next-hrefs
-  ([domain ^org.jsoup.nodes.Document doc saved-pages]
+  ([domain ^Document doc saved-pages]
    (next-hrefs domain doc saved-pages {}))
   ([domain page saved-pages {:keys [inc-filters] :or {inc-filters []}}]
    (let [standard-filters [(partial of-domain? domain)]
@@ -49,8 +50,18 @@
      (set/difference hrefs (set saved-pages)))))
 
 (defn scan
+  "Returns a collection of pages on the same domain as url.
+  Pages are represented by tuples in the form of [url page-contents].
+  Optionally takes an options map. Options include:
+  :inc-filters
+
+  A collection of predicates that are used to include pages that would not otherwise be included.
+
+  :timeout
+
+  The time to wait in ms before skipping a page during the scan"
   ([url] (scan url {}))
-  ([url opts]
+  ([url {:keys [timeout] :or {timeout 20000} :as opts}]
    (let [first-page [(normalize-url url) (download-page url)]]
      (loop [[page & rst :as pages] (set [first-page])
             saved-pages #{first-page}]
@@ -58,22 +69,19 @@
          (let [[_ content] page
                saved-urls (map first saved-pages)
                next-hrefs (next-hrefs (get-domain url) @content saved-urls opts)
-               next-pages (map (fn [href] [href (download-page href)]) next-hrefs)]
+               next-pages (map (fn [href] [href (download-page href timeout)]) next-hrefs)]
            (recur (concat rst next-pages) (concat saved-pages next-pages)))
          saved-pages)))))
 
 (comment
-
-
   (def results (scan "https://example.com/"))
   (count results)
 
   (defn example-filter [s]
     (str/ends-with? s "/example"))
 
-  (def results (scan "https://example.com/" {:inc-filters [example-filter]}))
+  (def results (scan "https://example.com/" {:inc-filters [example-filter] :timeout 1000}))
   (map first results)
-  ;(def results (scan "https://soundcloud.com/" {:inc-filters [mp3-filter]}))
   )
 
 

@@ -3,8 +3,8 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
-  (:import [org.jsoup Jsoup]
-           [org.jsoup.nodes Document Element]))
+  (:import (org.jsoup Jsoup)
+           (org.jsoup.nodes Document Element)))
 
 (defn- download-page
   ([url] (download-page url 2000))
@@ -39,6 +39,7 @@
 (defn- get-domain [url]
   (:host (bean (as-url url))))
 
+;;TODO multi-thread
 (defn- next-hrefs
   ([domain ^Document doc saved-pages]
    (next-hrefs domain doc saved-pages {}))
@@ -48,6 +49,12 @@
                     (filter (apply some-fn (concat standard-filters inc-filters)))
                     set)]
      (set/difference hrefs (set saved-pages)))))
+
+(defn- finished? [pages limit saved-pages]
+  (let [limit-reached? (and limit (>= (count saved-pages) limit))]
+    (cond limit-reached? (do (log/info "Limit of" limit "reached.") true)
+          (not (seq pages)) (do (log/info "All pages processed.") true)
+          :else false)))
 
 (defn scan
   "Returns a collection of pages on the same domain as url.
@@ -59,13 +66,19 @@
 
   :timeout
 
-  The time to wait in ms before skipping a page during the scan"
+  The time to wait in ms before skipping a page during the scan
+
+  :limit
+
+  The number of pages to scan before returning.  This is only an approximate limit
+  because of the way pages are scanned in batches based on the number of
+  hrefs found on a prior page"
   ([url] (scan url {}))
-  ([url {:keys [timeout] :or {timeout 20000} :as opts}]
+  ([url {:keys [timeout limit] :or {timeout 20000} :as opts}]
    (let [first-page [(normalize-url url) (download-page url)]]
      (loop [[page & rst :as pages] (set [first-page])
             saved-pages #{first-page}]
-       (if (seq pages)
+       (if-not (finished? pages limit saved-pages)
          (let [[_ content] page
                saved-urls (map first saved-pages)
                next-hrefs (next-hrefs (get-domain url) @content saved-urls opts)
@@ -74,7 +87,12 @@
          saved-pages)))))
 
 (comment
-  (def results (scan "https://example.com/"))
+  (time (def results (scan "https://google.com" {:limit 100})));"Elapsed time: 3240.9796 msecs"
+  ;;"Elapsed time: 2001.3641 msecs"
+  ;;"Elapsed time: 12601.2499 msecs"
+  ;;"Elapsed time: 3240.9796 msecs"
+
+
   (count results)
 
   (defn example-filter [s]
